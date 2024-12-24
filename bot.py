@@ -63,7 +63,7 @@ def monitor():
                     current_available_entries = AvailableEntries(current_schedule)
                     current_start_times = current_available_entries.get_start_times()
                     new_start_times = new_available_entries.get_start_times()
-                    times_to_notify = list(set(new_start_times) - set(current_start_times))
+                    times_to_notify = sorted(list(set(new_start_times) - set(current_start_times)))
                     if len(times_to_notify) != 0:
                         day_str = day.strftime("%d-%m-%Y")
                         message = f"New time slots available for {hall} on {day_str} for {MinimalTimeSlot} minutes: {times_to_notify}"
