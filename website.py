@@ -15,6 +15,7 @@ HallToId = {
 
 MinimalTimeSlot = 60
 MinimalTime = 1050 # 17:30
+MaximumTime = 1320 # 22:00
 
 def get_schedule_url(id, date):
     date_str = date.strftime("%Y%m%d")
@@ -34,8 +35,8 @@ class AvailableEntries:
         def next_entry(self):
             return AvailableEntries.AvailableEntry(self.time + 15)
 
-        def to_notify(self):
-            return self.time >= MinimalTime
+        def available_to_start(self):
+            return self.time >= MinimalTime and self.time + MinimalTimeSlot <= MaximumTime
 
     def __init__(self, times=[]):
         self.entries = []
@@ -55,18 +56,18 @@ class AvailableEntries:
         required_len = MinimalTimeSlot // 15
         result = []
         for i in range(len(self.entries)):
-            if not self.entries[i].to_notify():
+            if not self.entries[i].available_to_start():
                 continue
             if i + required_len <= len(self.entries) and self.entries[i].id() + required_len - 1 == self.entries[i + required_len - 1].id():
                 result.append(self.entries[i].time_str())
         return result
 
-    def get_slots(self):
+    def get_slots(self, every=False):
         required_len = MinimalTimeSlot // 15
         result = []
         start = 0
         while start < len(self.entries):
-            if not self.entries[start].to_notify():
+            if not every and not self.entries[start].available_to_start():
                 start += 1
                 continue
             end = start

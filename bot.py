@@ -47,7 +47,7 @@ def schedule(message):
     reply_message = ""
     for hall, id in HallToId.items():
         available_entries = get_available_entries(hall, parsed_date)
-        available_slots = available_entries.get_slots()
+        available_slots = available_entries.get_slots(every=True)
         slots_strings = list(map(lambda x: f"{x[0].time_str()}-{x[1].time_str()}", available_slots))
         reply_message += f"Available slots for {hall}: {slots_strings}\n"
     bot.reply_to(message, reply_message)
