@@ -1,9 +1,10 @@
 import telebot
-from website import HallToId, get_available_entries, AvailableEntries, MinimalTimeSlot
+from website import HallToId, get_available_entries, AvailableEntries
 import datetime
-import time
-import data
 import os
+import data
+
+MAX_AVAILABLE_DAYS = 100
 
 def get_key():
     api_key = os.getenv("FUTSAL_BOT_API_KEY")
@@ -13,7 +14,10 @@ def get_key():
 
     return api_key
 
-DAYS_TO_MONITOR = 90
+def get_bot():
+    return telebot.TeleBot(get_key())
+
+bot = get_bot()
 
 def try_parse_date(date_string, date_format):
     try:
@@ -22,13 +26,12 @@ def try_parse_date(date_string, date_format):
     except ValueError:
         return False, None
 
-bot = telebot.TeleBot(get_key())
-
 @bot.message_handler(commands=['help'])
 def help(message):
     reply_message = """
 /help - for help
 /schedule %d-%m-%Y - schedule for particular day
+/available N - all available slots for the next N days
     """
     bot.reply_to(message, reply_message)
 
@@ -49,28 +52,48 @@ def schedule(message):
         reply_message += f"Available slots for {hall}: {slots_strings}\n"
     bot.reply_to(message, reply_message)
 
-def monitor():
-    chat_ids = ['420051874', '-4632050646']
-    while True:
-        today = datetime.date.today()
-        for i in range(DAYS_TO_MONITOR):
-            day = today + datetime.timedelta(days=i)
-            for hall, id in HallToId.items():
-                current_schedule = data.get_schedule(hall, day)
-                new_available_entries = get_available_entries(hall, day)
+@bot.message_handler(commands=['available'])
+def available(message):
+    text = message.text[len("/available "):]
+    try:
+        days = int(text)
+    except ValueError:
+        print("Invalid input, number of days is required")
+        return
+    if days > MAX_AVAILABLE_DAYS:
+        print(f"Invalid input, number of days should be less than {MAX_AVAILABLE_DAYS}")
+        return
 
-                if current_schedule is not None:
-                    current_available_entries = AvailableEntries(current_schedule)
-                    current_start_times = current_available_entries.get_start_times()
-                    new_start_times = new_available_entries.get_start_times()
-                    times_to_notify = sorted(list(set(new_start_times) - set(current_start_times)))
-                    if len(times_to_notify) != 0:
-                        day_str = day.strftime("%d-%m-%Y")
-                        message = f"New time slots available for {hall} on {day_str} for {MinimalTimeSlot} minutes: {times_to_notify}"
-                        for chat_id in chat_ids:
-                            bot.send_message(chat_id, message)
-                
-                data.update_schedule(hall, day, new_available_entries.config_value())
-                time.sleep(2)
-        bot.send_message("420051874", "Full cycle is checked, sleep for 10 min")
-        time.sleep(10*60)
+    reply_messages = []
+    reply_message = ""
+    today = datetime.date.today()
+    for i in range(days):
+        day = today + datetime.timedelta(days=i)
+        if day.weekday() >= 5:
+            # skip weekends
+            continue
+        for hall, id in HallToId.items():
+            schedule = data.get_schedule(hall, day)
+            if schedule is None:
+                continue
+            available_entries = AvailableEntries(schedule)
+            start_times = available_entries.get_start_times()
+            if len(start_times) > 0:
+                available_slots = available_entries.get_slots()
+                slots_strings = list(map(lambda x: f"{x[0].time_str()}-{x[1].time_str()}", available_slots))
+                day_str = day.strftime("%a, %d-%m-%Y")
+                current_message = f"{hall} on {day_str}: {slots_strings}\n"
+                if len(reply_message) + len(current_message) > 4096:
+                    reply_messages.append(reply_message)
+                    reply_message = current_message
+                else:
+                    reply_message += current_message
+    if len(reply_message) > 0:
+        reply_messages.append(reply_message)
+    if len(reply_messages) == 0:
+        reply_messages.append("No available slots in the given period")
+    for reply_message in reply_messages:
+        bot.reply_to(message, reply_message)
+
+if __name__ == "__main__":
+    bot.infinity_polling()
