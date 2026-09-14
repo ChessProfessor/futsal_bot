@@ -5,6 +5,7 @@ import time
 import data
 
 DAYS_TO_MONITOR = MAX_AVAILABLE_DAYS
+DAYS_TO_REPORT = 90
 
 def monitor():
     chat_ids = ['-4632050646']
@@ -16,7 +17,7 @@ def monitor():
             current_schedule = data.get_schedule(hall, day)
             new_available_entries = get_available_entries(hall, day)
 
-            if current_schedule is not None and day.weekday() < 5:
+            if i < DAYS_TO_REPORT and current_schedule is not None and day.weekday() < 5:
                 current_available_entries = AvailableEntries(current_schedule)
                 current_start_times = current_available_entries.get_start_times()
                 new_start_times = new_available_entries.get_start_times()

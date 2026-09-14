@@ -7,7 +7,7 @@ import data
 from website import HallToId, get_available_entries, AvailableEntries
 
 DATE_FORMAT = "%d-%m-%Y"
-MAX_AVAILABLE_DAYS = 90
+MAX_AVAILABLE_DAYS = 150
 TELEGRAM_MESSAGE_LIMIT = 4096
 AVAILABLE_USAGE = (
     "Usage:\n"

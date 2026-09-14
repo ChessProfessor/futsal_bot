@@ -13,8 +13,8 @@ HallToId = {
     "Calvijn Sports Hall": 1000000174,
 }
 
-MinimalTimeSlot = 60
-MinimalTime = 1050 # 17:30
+MinimalTimeSlot = 90
+MinimalTime = 1080 # 18:00
 MaximumTime = 1320 # 22:00
 
 def get_schedule_url(id, date):
