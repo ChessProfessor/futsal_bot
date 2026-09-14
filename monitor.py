@@ -1,10 +1,10 @@
 from website import HallToId, get_available_entries, AvailableEntries, MinimalTimeSlot
-from bot import get_bot
+from bot import get_bot, MAX_AVAILABLE_DAYS
 import datetime
 import time
 import data
 
-DAYS_TO_MONITOR = 90
+DAYS_TO_MONITOR = MAX_AVAILABLE_DAYS
 
 def monitor():
     chat_ids = ['-4632050646']

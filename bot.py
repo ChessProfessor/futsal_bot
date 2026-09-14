@@ -1,10 +1,32 @@
-import telebot
-from website import HallToId, get_available_entries, AvailableEntries
 import datetime
 import os
-import data
 
-MAX_AVAILABLE_DAYS = 100
+import telebot
+
+import data
+from website import HallToId, get_available_entries, AvailableEntries
+
+DATE_FORMAT = "%d-%m-%Y"
+MAX_AVAILABLE_DAYS = 90
+TELEGRAM_MESSAGE_LIMIT = 4096
+AVAILABLE_USAGE = (
+    "Usage:\n"
+    "/available END_DATE\n"
+    "/available START_DATE END_DATE\n"
+    "Dates must use DD-MM-YYYY."
+)
+HELP_MESSAGE = """
+/help - show this help
+/schedule DD-MM-YYYY - schedule for a particular day
+/available END_DATE - available weekday slots from today through END_DATE
+/available START_DATE END_DATE - available weekday slots in an inclusive date range
+
+Dates must use DD-MM-YYYY. Both start and end dates are included.
+"""
+
+
+class AvailableRangeError(ValueError):
+    pass
 
 def get_key():
     api_key = os.getenv("FUTSAL_BOT_API_KEY")
@@ -26,22 +48,127 @@ def try_parse_date(date_string, date_format):
     except ValueError:
         return False, None
 
+
+def parse_date(date_string):
+    is_valid, parsed_date = try_parse_date(date_string, DATE_FORMAT)
+    if not is_valid or parsed_date.strftime(DATE_FORMAT) != date_string:
+        raise AvailableRangeError(
+            f"Invalid date '{date_string}'. Dates must use DD-MM-YYYY."
+        )
+    return parsed_date.date()
+
+
+def parse_available_range(arguments, today=None):
+    if today is None:
+        today = datetime.date.today()
+
+    parts = arguments.split()
+    if len(parts) == 1:
+        start_date = today
+        end_date = parse_date(parts[0])
+    elif len(parts) == 2:
+        start_date = parse_date(parts[0])
+        end_date = parse_date(parts[1])
+    else:
+        raise AvailableRangeError(AVAILABLE_USAGE)
+
+    if start_date > end_date:
+        raise AvailableRangeError("Start date cannot be after end date.")
+    if start_date < today:
+        raise AvailableRangeError("Dates in the past are not supported.")
+
+    last_available_date = today + datetime.timedelta(days=MAX_AVAILABLE_DAYS - 1)
+    if end_date > last_available_date:
+        raise AvailableRangeError(
+            "Availability can only be requested through "
+            f"{last_available_date.strftime(DATE_FORMAT)}."
+        )
+
+    return start_date, end_date
+
+
+def build_available_messages(start_date, end_date):
+    header = (
+        "⚽ Available slots\n"
+        f"{start_date.strftime(DATE_FORMAT)} – {end_date.strftime(DATE_FORMAT)}"
+    )
+    date_blocks = []
+    number_of_days = (end_date - start_date).days + 1
+
+    for offset in range(number_of_days):
+        day = start_date + datetime.timedelta(days=offset)
+        if day.weekday() >= 5:
+            continue
+
+        hall_lines = []
+        for hall in HallToId:
+            schedule = data.get_schedule(hall, day)
+            if schedule is None:
+                continue
+
+            available_entries = AvailableEntries(schedule)
+            available_slots = available_entries.get_slots()
+            if not available_slots:
+                continue
+
+            slots_string = ", ".join(
+                f"{start.time_str()}–{end.time_str()}"
+                for start, end in available_slots
+            )
+            hall_lines.append(f"• {hall}: {slots_string}")
+
+        if hall_lines:
+            date_blocks.append(
+                f"{day.strftime('%a, %d-%m-%Y')}\n" + "\n".join(hall_lines)
+            )
+
+    if not date_blocks:
+        return [f"{header}\n\nNo available slots in the given period."]
+
+    messages = []
+    current_message = header
+    for date_block in date_blocks:
+        candidate = f"{current_message}\n\n{date_block}"
+        if len(candidate) <= TELEGRAM_MESSAGE_LIMIT:
+            current_message = candidate
+        else:
+            messages.append(current_message)
+            current_message = f"{header}\n\n{date_block}"
+    messages.append(current_message)
+    return messages
+
+
+def reply_with_data_warning(message, reply_messages):
+    if isinstance(reply_messages, str):
+        reply_messages = [reply_messages]
+    else:
+        reply_messages = list(reply_messages)
+
+    warning = data.get_stale_data_warning()
+    if warning:
+        warned_message = f"{warning}\n\n{reply_messages[0]}"
+        if len(warned_message) <= TELEGRAM_MESSAGE_LIMIT:
+            reply_messages[0] = warned_message
+        else:
+            reply_messages.insert(0, warning)
+
+    for reply_message in reply_messages:
+        bot.reply_to(message, reply_message)
+
+
 @bot.message_handler(commands=['help'])
 def help(message):
-    reply_message = """
-/help - for help
-/schedule %d-%m-%Y - schedule for particular day
-/available N - all available slots for the next N days
-    """
-    bot.reply_to(message, reply_message)
+    reply_with_data_warning(message, HELP_MESSAGE)
 
 @bot.message_handler(commands=['schedule'])
 def schedule(message):
     text = message.text[len("/schedule "):]
-    date_format = "%d-%m-%Y"
-    is_valid, parsed_date = try_parse_date(text, date_format)
+    is_valid, parsed_date = try_parse_date(text, DATE_FORMAT)
     if not is_valid:
-        bot.reply_to(message, f"Your date is in incorrect format, expected format is {date_format}.")
+        reply_with_data_warning(
+            message,
+            f"Your date is in incorrect format, expected format is {DATE_FORMAT}.",
+        )
         return
 
     reply_message = ""
@@ -50,50 +177,26 @@ def schedule(message):
         available_slots = available_entries.get_slots(every=True)
         slots_strings = list(map(lambda x: f"{x[0].time_str()}-{x[1].time_str()}", available_slots))
         reply_message += f"Available slots for {hall}: {slots_strings}\n"
-    bot.reply_to(message, reply_message)
+    reply_with_data_warning(message, reply_message)
 
 @bot.message_handler(commands=['available'])
 def available(message):
-    text = message.text[len("/available "):]
+    command_parts = message.text.split(maxsplit=1)
+    arguments = command_parts[1] if len(command_parts) == 2 else ""
+
     try:
-        days = int(text)
-    except ValueError:
-        print("Invalid input, number of days is required")
-        return
-    if days > MAX_AVAILABLE_DAYS:
-        print(f"Invalid input, number of days should be less than {MAX_AVAILABLE_DAYS}")
+        start_date, end_date = parse_available_range(arguments)
+    except AvailableRangeError as error:
+        error_message = str(error)
+        if error_message != AVAILABLE_USAGE:
+            error_message = f"{error_message}\n\n{AVAILABLE_USAGE}"
+        reply_with_data_warning(message, error_message)
         return
 
-    reply_messages = []
-    reply_message = ""
-    today = datetime.date.today()
-    for i in range(days):
-        day = today + datetime.timedelta(days=i)
-        if day.weekday() >= 5:
-            # skip weekends
-            continue
-        for hall, id in HallToId.items():
-            schedule = data.get_schedule(hall, day)
-            if schedule is None:
-                continue
-            available_entries = AvailableEntries(schedule)
-            start_times = available_entries.get_start_times()
-            if len(start_times) > 0:
-                available_slots = available_entries.get_slots()
-                slots_strings = list(map(lambda x: f"{x[0].time_str()}-{x[1].time_str()}", available_slots))
-                day_str = day.strftime("%a, %d-%m-%Y")
-                current_message = f"{hall} on {day_str}: {slots_strings}\n"
-                if len(reply_message) + len(current_message) > 4096:
-                    reply_messages.append(reply_message)
-                    reply_message = current_message
-                else:
-                    reply_message += current_message
-    if len(reply_message) > 0:
-        reply_messages.append(reply_message)
-    if len(reply_messages) == 0:
-        reply_messages.append("No available slots in the given period")
-    for reply_message in reply_messages:
-        bot.reply_to(message, reply_message)
+    reply_with_data_warning(
+        message,
+        build_available_messages(start_date, end_date),
+    )
 
 if __name__ == "__main__":
     bot.infinity_polling()
