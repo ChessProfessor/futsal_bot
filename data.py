@@ -4,10 +4,14 @@ import os
 
 
 STALE_DATA_DAYS = 7
+STALE_NOTIFICATION_FILE = "data/.last_stale_notification"
 
 
-def get_stale_data_warning():
-    today_file = f"data/{datetime.date.today().strftime('%Y%m%d')}.json"
+def get_stale_data_warning(today=None):
+    if today is None:
+        today = datetime.date.today()
+
+    today_file = f"data/{today.strftime('%Y%m%d')}.json"
     try:
         last_updated_timestamp = os.path.getmtime(today_file)
     except OSError:
@@ -22,6 +26,27 @@ def get_stale_data_warning():
         f"⚠️ Cached availability data is over {STALE_DATA_DAYS} days old "
         f"(last update: {last_updated.strftime('%d-%m-%Y')})."
     )
+
+
+def stale_notification_was_sent_today(today=None):
+    if today is None:
+        today = datetime.date.today()
+
+    try:
+        with open(STALE_NOTIFICATION_FILE, "r") as file:
+            return file.read().strip() == today.isoformat()
+    except OSError:
+        return False
+
+
+def mark_stale_notification_sent(today=None):
+    if today is None:
+        today = datetime.date.today()
+
+    os.makedirs(os.path.dirname(STALE_NOTIFICATION_FILE), exist_ok=True)
+    with open(STALE_NOTIFICATION_FILE, "w") as file:
+        file.write(today.isoformat())
+
 
 def get_schedule(hall, date):
     file_name = f"data/{date.strftime('%Y%m%d')}.json"

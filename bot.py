@@ -90,7 +90,7 @@ def parse_available_range(arguments, today=None):
 def build_available_messages(start_date, end_date):
     header = (
         "⚽ Available slots\n"
-        f"{start_date.strftime(DATE_FORMAT)} – {end_date.strftime(DATE_FORMAT)}"
+        f"🗓 {start_date.strftime(DATE_FORMAT)} – {end_date.strftime(DATE_FORMAT)}"
     )
     date_blocks = []
     number_of_days = (end_date - start_date).days + 1
@@ -115,15 +115,15 @@ def build_available_messages(start_date, end_date):
                 f"{start.time_str()}–{end.time_str()}"
                 for start, end in available_slots
             )
-            hall_lines.append(f"• {hall}: {slots_string}")
+            hall_lines.append(f"⚽ {hall}\n⏰ {slots_string}")
 
         if hall_lines:
             date_blocks.append(
-                f"{day.strftime('%a, %d-%m-%Y')}\n" + "\n".join(hall_lines)
+                f"🗓 {day.strftime('%a, %d-%m-%Y')}\n" + "\n\n".join(hall_lines)
             )
 
     if not date_blocks:
-        return [f"{header}\n\nNo available slots in the given period."]
+        return [f"{header}\n\n😴 No available slots in the given period."]
 
     messages = []
     current_message = header
@@ -138,19 +138,11 @@ def build_available_messages(start_date, end_date):
     return messages
 
 
-def reply_with_data_warning(message, reply_messages):
+def reply_with_messages(message, reply_messages):
     if isinstance(reply_messages, str):
         reply_messages = [reply_messages]
     else:
         reply_messages = list(reply_messages)
-
-    warning = data.get_stale_data_warning()
-    if warning:
-        warned_message = f"{warning}\n\n{reply_messages[0]}"
-        if len(warned_message) <= TELEGRAM_MESSAGE_LIMIT:
-            reply_messages[0] = warned_message
-        else:
-            reply_messages.insert(0, warning)
 
     for reply_message in reply_messages:
         bot.reply_to(message, reply_message)
@@ -158,26 +150,33 @@ def reply_with_data_warning(message, reply_messages):
 
 @bot.message_handler(commands=['help'])
 def help(message):
-    reply_with_data_warning(message, HELP_MESSAGE)
+    reply_with_messages(message, HELP_MESSAGE)
 
 @bot.message_handler(commands=['schedule'])
 def schedule(message):
     text = message.text[len("/schedule "):]
     is_valid, parsed_date = try_parse_date(text, DATE_FORMAT)
     if not is_valid:
-        reply_with_data_warning(
+        reply_with_messages(
             message,
             f"Your date is in incorrect format, expected format is {DATE_FORMAT}.",
         )
         return
 
-    reply_message = ""
+    hall_blocks = []
     for hall, id in HallToId.items():
         available_entries = get_available_entries(hall, parsed_date)
         available_slots = available_entries.get_slots(every=True)
-        slots_strings = list(map(lambda x: f"{x[0].time_str()}-{x[1].time_str()}", available_slots))
-        reply_message += f"Available slots for {hall}: {slots_strings}\n"
-    reply_with_data_warning(message, reply_message)
+        slots_string = ", ".join(
+            f"{start.time_str()}–{end.time_str()}"
+            for start, end in available_slots
+        ) or "No available slots"
+        hall_blocks.append(f"⚽ {hall}\n⏰ {slots_string}")
+    reply_message = (
+        f"🗓 {parsed_date.strftime('%a, %d-%m-%Y')}\n\n"
+        + "\n\n".join(hall_blocks)
+    )
+    reply_with_messages(message, reply_message)
 
 @bot.message_handler(commands=['available'])
 def available(message):
@@ -190,10 +189,10 @@ def available(message):
         error_message = str(error)
         if error_message != AVAILABLE_USAGE:
             error_message = f"{error_message}\n\n{AVAILABLE_USAGE}"
-        reply_with_data_warning(message, error_message)
+        reply_with_messages(message, error_message)
         return
 
-    reply_with_data_warning(
+    reply_with_messages(
         message,
         build_available_messages(start_date, end_date),
     )
