@@ -90,7 +90,7 @@ def parse_available_range(arguments, today=None):
 def build_available_messages(start_date, end_date):
     header = (
         "⚽ Available slots\n"
-        f"🗓 {start_date.strftime(DATE_FORMAT)} – {end_date.strftime(DATE_FORMAT)}"
+        f"{start_date.strftime(DATE_FORMAT)} – {end_date.strftime(DATE_FORMAT)}"
     )
     date_blocks = []
     number_of_days = (end_date - start_date).days + 1
@@ -115,15 +115,15 @@ def build_available_messages(start_date, end_date):
                 f"{start.time_str()}–{end.time_str()}"
                 for start, end in available_slots
             )
-            hall_lines.append(f"⚽ {hall}\n⏰ {slots_string}")
+            hall_lines.append(f"• {hall}: {slots_string}")
 
         if hall_lines:
             date_blocks.append(
-                f"🗓 {day.strftime('%a, %d-%m-%Y')}\n" + "\n\n".join(hall_lines)
+                f"{day.strftime('%a, %d-%m-%Y')}\n" + "\n".join(hall_lines)
             )
 
     if not date_blocks:
-        return [f"{header}\n\n😴 No available slots in the given period."]
+        return [f"{header}\n\nNo available slots in the given period."]
 
     messages = []
     current_message = header
@@ -171,10 +171,11 @@ def schedule(message):
             f"{start.time_str()}–{end.time_str()}"
             for start, end in available_slots
         ) or "No available slots"
-        hall_blocks.append(f"⚽ {hall}\n⏰ {slots_string}")
+        hall_blocks.append(f"• {hall}: {slots_string}")
     reply_message = (
-        f"🗓 {parsed_date.strftime('%a, %d-%m-%Y')}\n\n"
-        + "\n\n".join(hall_blocks)
+        f"⚽ Available slots\n"
+        f"{parsed_date.strftime('%a, %d-%m-%Y')}\n\n"
+        + "\n".join(hall_blocks)
     )
     reply_with_messages(message, reply_message)
 

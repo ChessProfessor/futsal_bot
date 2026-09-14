@@ -13,7 +13,7 @@ CELEBRATION_MESSAGES = (
     "⚽ The pitch has chosen you!",
     "🔥 Warm up those suspicious hamstrings!",
     "🎉 A slot escaped the booking system!",
-    "🙌 Summon the group chat!",,
+    "🙌 Summon the group chat!",
     "✨ The calendar gods have blinked!",
     "👀 A free pitch in Amsterdam? Miracles happen!",
     "🎊 The football gods demand five-a-side!",
@@ -32,7 +32,7 @@ SPORTS_HALLS_SOUTH = {
 }
 DE_PIJP_JOKES = (
     "🍟 Play for the badge. Stay for the De Pijp fries.",
-i)
+)
 SPORTS_HALLS_SOUTH_JOKES = (
     "🍺 Tactical debrief at the nearby hotel afterward. Strictly professional.",
     "🏨 The nearby hotel bar is preparing for the third half.",
@@ -52,9 +52,9 @@ def build_new_slot_message(hall, day, slots_string):
 
     return (
         f"{intro}\n\n"
-        f"⚽ {hall}\n"
-        f"🗓 {day.strftime('%a, %d-%m-%Y')}\n"
-        f"⏰ {slots_string}"
+        f"{hall}\n"
+        f"{day.strftime('%a, %d-%m-%Y')}\n"
+        f"{slots_string}"
     )
 
 
